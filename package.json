@@ -1,0 +1,36 @@
+{
+  "name": "news-digest-rag-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "API-first news ingestion and hybrid RAG digest service",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --noEmit",
+    "start": "tsx src/index.ts",
+    "test": "vitest run",
+    "ingest": "tsx src/scripts/ingest.ts"
+  },
+  "dependencies": {
+    "@langchain/community": "^0.3.49",
+    "@langchain/core": "^1.2.13",
+    "@langchain/groq": "^1.3.1",
+    "@langchain/mistralai": "^0.2.0",
+    "@langchain/openai": "^0.4.5",
+    "cheerio": "^1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongodb": "^6.12.0",
+    "playwright": "^1.51.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

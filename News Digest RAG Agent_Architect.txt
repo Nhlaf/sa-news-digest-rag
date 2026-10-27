@@ -1,0 +1,170 @@
+#News Digest RAG Agent – Backend Architecture
+
+## 1. Objective
+
+Build an **API-first backend service (no UI)** using **Node.js + TypeScript + LangChain + MongoDB** that:
+
+1. Ingests news articles from multiple news websites using a **LangChain web loader (Cheerio-based)**.
+2. Cleans, chunks and stores article content into **MongoDB Atlas**:
+   - A single collection: `news_articles`
+   - A **vector index** on chunk embeddings for semantic search
+   - A **BM25 / full-text index** on article text, title, and location hints
+3. Exposes APIs that allow a client to ask questions like:
+   - “Give me a digest of today’s news”
+   - “Give me news about Chennai in the last 3 days”
+   - “Summarise all AI-related news from yesterday”
+4. Uses a **LangChain RAG pipeline** to:
+   - Retrieve relevant article chunks via **hybrid search (BM25 + vector)**
+   - Generate a **digest-style summary** via an LLM.
+
+This is an **API-only backend**. No web frontend is required. :contentReference[oaicite:1]{index=1}
+
+---
+
+## 2. Scope
+
+### 2.1 In Scope
+
+- Backend only:
+  - Node.js (LTS) + TypeScript project
+  - Use LangChain (TypeScript) for:
+    - Web loading (Cheerio-based loader)
+    - Embeddings
+    - RAG chains (retriever + LLM)
+  - Use MongoDB (Atlas) for:
+    - Storing article documents
+    - Vector index on embeddings
+    - BM25 / full-text index on text fields
+
+- Two main pipelines:
+  1. **Ingestion Pipeline**
+     - Fetch news pages via web loader
+     - Extract articles and clean HTML
+     - Chunk article content
+     - Generate embeddings for each chunk
+     - Store in MongoDB with metadata + indexes
+  2. **Retrieval Pipeline**
+     - Hybrid search: BM25 (keyword) + vector (semantic)
+     - Use LangChain RAG chain for summarisation (no reranking for now)
+
+### 2.2 Out of Scope
+
+- Web UI / dashboards
+- Complex analytics
+- Authentication / authorization (optional future enhancement)
+
+---
+
+## 3. High-Level Architecture
+
+### 3.1 Components
+
+1. **Data Sources**
+   - Configurable list (10–12) of news websites or section URLs (e.g. “Chennai news”, “India news”, “Technology news” pages).
+   - Defined via:
+     - Environment variable (`NEWS_SOURCE_URLS`) **or**
+     - Config file `config/newsSources.ts`.
+   - Each source describes:
+     - Domain (e.g. `thehindu.com`)
+     - Section (e.g. `city/chennai`, `technology`, `nation`)
+     - Base URL
+     - Page type: `list` or `article`
+     - Optional CSS selectors / parse hints.
+
+2. **Ingestion Layer (LangChain + Web Loader)**
+   - A Node.js script or API endpoint:
+     - Uses **CheerioWebBaseLoader** (or equivalent LangChain web loader) to fetch HTML.
+     - Extracts:
+       - Title
+       - Main article body text
+       - Published date/time
+       - Optional: author, tags, section
+     - Cleans text (remove menus, ads, scripts, styles).
+     - Chunks article text into manageable pieces.
+     - Enriches each chunk with metadata.
+     - Generates embeddings using LangChain embeddings model.
+     - Inserts / upserts into MongoDB and ensures vector + BM25 indexes are usable. :contentReference[oaicite:2]{index=2}
+
+3. **Storage Layer (MongoDB Atlas)**
+
+- Database: `news_rag_db`
+- Collection: `news_articles`
+
+Indexes:
+
+- **Vector index** on `chunks.embedding` (e.g. using the same embedding model as previous RAG work).
+- **BM25 / full-text index** on:
+  - `chunks.text`
+  - `title`
+  - `location_hint` (for geo/region search)
+
+4. **RAG Layer (LangChain)**
+
+- **Retriever**:
+  - Combines:
+    - Text/BM25 search (for date, location, keywords)
+    - Vector similarity search (for semantic relevance)
+  - Hybrid retrieval strategy:
+    - BM25: pre-filter + initial ranking
+    - Vector: top-k semantic neighbours
+    - Merge + deduplicate results.
+
+- **RAG Chain**:
+  - Inputs: user query + retrieved chunks + metadata
+  - System prompt: “News Digest Agent”
+  - Task:
+    - Summarise key updates
+    - Group by date, location or topic when relevant
+    - Include sources and publication dates in output
+
+5. **API Layer (REST)**
+
+Endpoints:
+
+- `POST /ingest/run`
+  - Triggers ingestion over configured news sources.
+  - Optional filters (subset of sources, date hints).
+  - Returns ingestion stats (e.g. sources processed, articles fetched, new vs updated docs, errors).
+
+- `POST /news/query`
+  - Accepts natural language query + optional filters (date, fromDate/toDate, location, topic, maxItems).
+  - Invokes hybrid retriever + RAG chain.
+  - Returns a structured news digest response.
+
+---
+
+## 4. Data Model & Metadata (MongoDB)
+
+Collection: `news_articles`
+
+Example document:
+
+```jsonc
+{
+  "_id": "ObjectId",
+  "source": {
+    "domain": "example-news.com",
+    "section": "city/chennai",
+    "url": "https://example-news.com/city/chennai/article-123"
+  },
+  "title": "Chennai sees heavy rainfall...",
+  "content": "Full cleaned article text ...",
+  "chunks": [
+    {
+      "chunk_id": "article-123-1",
+      "text": "First 500–800 characters ...",
+      "embedding": [0.01, 0.23, 0.11],
+      "metadata": {
+        "published_at": "2025-12-01T05:30:00Z",
+        "fetched_at": "2025-12-01T07:00:00Z",
+        "language": "en",
+        "topic_tags": ["weather", "city"],
+        "source_domain": "example-news.com",
+        "source_url": "https://example-news.com/city/chennai/article-123",
+        "section": "city",
+        "headline": "Chennai sees heavy rainfall...",
+        "location_hint": ["Chennai", "Tamil Nadu", "India"]
+      }
+    }
+  ]
+}

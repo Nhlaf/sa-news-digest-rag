@@ -1,0 +1,1473 @@
+# News Digest RAG Agent – Frontend Architecture
+
+## 1. Objective
+
+Build a **responsive web frontend** for the existing News Digest RAG Agent backend.
+
+The frontend will provide a user-friendly interface for interacting with the backend's news ingestion and RAG capabilities.
+
+The frontend must allow users to:
+
+1. Check whether the backend is available.
+2. Enter a natural-language news query.
+3. Optionally provide a location.
+4. Specify the maximum number of news items.
+5. Submit the query to the backend.
+6. View the generated news digest.
+7. View the news articles returned by the backend.
+8. View article source and publication information.
+9. Open the original news article.
+10. Manually trigger news ingestion.
+11. View ingestion status and results.
+
+The frontend is a **client application only**.
+
+It must not directly access MongoDB, news websites, embeddings, LangChain, or the LLM.
+
+---
+
+# 2. Scope
+
+## 2.1 In Scope
+
+### Frontend
+
+* React application
+* TypeScript
+* Responsive web UI
+* News query interface
+* Location input
+* Maximum articles input
+* News digest display
+* News article cards
+* Source links
+* Backend health indicator
+* News ingestion controls
+* Loading states
+* Error states
+* Empty-result states
+
+### Backend Integration
+
+The frontend integrates with the existing backend through:
+
+```text
+GET  /health
+POST /news/query
+POST /ingest/run
+```
+
+### Configuration
+
+The backend URL must be configurable using:
+
+```text
+VITE_API_BASE_URL
+```
+
+---
+
+## 2.2 Out of Scope
+
+The frontend must not implement:
+
+* News website scraping
+* Cheerio
+* Playwright
+* Article extraction
+* Article cleaning
+* Article chunking
+* Embedding generation
+* BM25 search
+* Vector search
+* MongoDB access
+* LangChain RAG
+* LLM calls
+* API keys for AI providers
+* MongoDB credentials
+
+These responsibilities remain in the backend.
+
+---
+
+# 3. Technology Stack
+
+Use:
+
+* **React**
+* **TypeScript**
+* **Vite**
+* **CSS**
+* **Fetch API**
+
+Avoid adding additional libraries unless they are required for a specific frontend requirement.
+
+---
+
+# 4. High-Level Architecture
+
+```text
+                         USER
+                           │
+                           ▼
+                  ┌─────────────────┐
+                  │  React Frontend │
+                  │                 │
+                  │  Query UI       │
+                  │  Filters        │
+                  │  Digest         │
+                  │  News Cards     │
+                  │  Ingestion      │
+                  └────────┬────────┘
+                           │
+                           ▼
+                  ┌─────────────────┐
+                  │   API Service   │
+                  │   newsApi.ts    │
+                  └────────┬────────┘
+                           │
+                           │ HTTP/REST
+                           ▼
+                  ┌─────────────────┐
+                  │     Backend     │
+                  │ Node.js + TS    │
+                  └────────┬────────┘
+                           │
+             ┌─────────────┼─────────────┐
+             ▼             ▼             ▼
+         Ingestion     Hybrid RAG     Health
+             │             │
+             ▼             ▼
+       News Sources    BM25 + Vector
+                           │
+                           ▼
+                          LLM
+                           │
+                           ▼
+                     News Digest
+                           │
+                           ▼
+                      Frontend
+                           │
+                           ▼
+                         USER
+```
+
+---
+
+# 5. Frontend Architecture Layers
+
+The frontend should be divided into the following layers:
+
+```text
+┌──────────────────────────────────┐
+│          Presentation            │
+│ React Components / UI             │
+├──────────────────────────────────┤
+│             Pages                │
+│ NewsDigestPage                   │
+├──────────────────────────────────┤
+│          Application State       │
+│ Query / Results / Loading        │
+├──────────────────────────────────┤
+│           API Service            │
+│ newsApi.ts                       │
+├──────────────────────────────────┤
+│             Types                │
+│ Request / Response Interfaces    │
+└──────────────────────────────────┘
+                 │
+                 ▼
+          Backend REST API
+```
+
+Each layer should have a clear responsibility.
+
+---
+
+# 6. Application Structure
+
+Use the following project structure:
+
+```text
+news-digest-frontend/
+│
+├── public/
+│
+├── src/
+│   │
+│   ├── components/
+│   │   ├── Header.tsx
+│   │   ├── HealthStatus.tsx
+│   │   ├── QueryForm.tsx
+│   │   ├── NewsDigest.tsx
+│   │   ├── NewsCard.tsx
+│   │   ├── IngestionPanel.tsx
+│   │   ├── LoadingState.tsx
+│   │   └── ErrorMessage.tsx
+│   │
+│   ├── pages/
+│   │   └── NewsDigestPage.tsx
+│   │
+│   ├── services/
+│   │   └── newsApi.ts
+│   │
+│   ├── types/
+│   │   └── news.ts
+│   │
+│   ├── App.tsx
+│   ├── main.tsx
+│   └── index.css
+│
+├── .env
+├── .env.example
+├── .gitignore
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+└── README.md
+```
+
+---
+
+# 7. Component Architecture
+
+## 7.1 Header
+
+File:
+
+```text
+src/components/Header.tsx
+```
+
+Responsibilities:
+
+* Display application name.
+* Display application description.
+* Display backend health status.
+
+UI:
+
+```text
+News Digest RAG Agent
+South African News Assistant
+
+● Backend Online
+```
+
+---
+
+# 8. Health Status
+
+File:
+
+```text
+src/components/HealthStatus.tsx
+```
+
+Responsibilities:
+
+* Call the backend health endpoint.
+* Display the current backend status.
+* Handle loading and failure states.
+
+Endpoint:
+
+```http
+GET /health
+```
+
+States:
+
+```text
+Checking...
+```
+
+```text
+● Backend Online
+```
+
+```text
+● Backend Offline
+```
+
+The health check must not prevent the user from seeing the main application UI.
+
+---
+
+# 9. Query Form
+
+File:
+
+```text
+src/components/QueryForm.tsx
+```
+
+Responsibilities:
+
+* Accept the user's natural-language question.
+* Accept an optional location.
+* Accept maximum article count.
+* Validate input.
+* Submit the query.
+* Display loading state.
+
+Fields:
+
+### Query
+
+```text
+Ask about the news
+```
+
+Required.
+
+Example placeholder:
+
+```text
+Summarise South African technology news from yesterday
+```
+
+### Location
+
+```text
+Location
+```
+
+Optional.
+
+Example:
+
+```text
+South Africa
+```
+
+### Maximum Articles
+
+```text
+Maximum articles
+```
+
+Default:
+
+```text
+8
+```
+
+---
+
+# 10. Query Request
+
+When the user submits the form, call:
+
+```http
+POST /news/query
+```
+
+Request structure:
+
+```json
+{
+  "query": "Summarise South African technology news from yesterday",
+  "location": "South Africa",
+  "maxItems": 8
+}
+```
+
+The frontend must only send fields supported by the backend API.
+
+The frontend must not attempt to perform retrieval itself.
+
+---
+
+# 11. Query Processing Flow
+
+```text
+User
+  │
+  ▼
+QueryForm
+  │
+  ▼
+Validate Input
+  │
+  ▼
+newsApi.queryNews()
+  │
+  ▼
+POST /news/query
+  │
+  ▼
+Backend
+  │
+  ├── Atlas Search
+  │
+  ├── Vector Search
+  │
+  ├── Hybrid Retrieval
+  │
+  └── RAG + LLM
+  │
+  ▼
+Backend Response
+  │
+  ▼
+NewsDigestPage
+  │
+  ├── Digest
+  │
+  └── News Cards
+  │
+  ▼
+User
+```
+
+---
+
+# 12. News Digest
+
+File:
+
+```text
+src/components/NewsDigest.tsx
+```
+
+Responsibilities:
+
+* Display the digest returned by `/news/query`.
+* Display the list of news items.
+* Handle empty results.
+
+The digest should be visually prominent.
+
+Example:
+
+```text
+────────────────────────────────────────
+
+NEWS DIGEST
+
+South African technology news from yesterday
+included several developments across AI,
+digital services and technology companies.
+
+────────────────────────────────────────
+```
+
+The frontend must not generate or modify the digest.
+
+It displays the response produced by the backend.
+
+---
+
+# 13. News Card
+
+File:
+
+```text
+src/components/NewsCard.tsx
+```
+
+Each returned news article should be displayed as a card.
+
+Example:
+
+```text
+┌─────────────────────────────────────────────┐
+│ Article headline                            │
+│                                             │
+│ Article summary...                          │
+│                                             │
+│ Source: News24                              │
+│ Published: 28 September 2026                │
+│                                             │
+│ [ Read Original Article → ]                 │
+└─────────────────────────────────────────────┘
+```
+
+The component should display information returned by the backend, such as:
+
+```text
+title
+summary
+source
+publishedAt
+url
+```
+
+Only display fields that exist in the actual API response.
+
+---
+
+# 14. Original Article
+
+If the backend provides an article URL, display:
+
+```text
+Read Original Article →
+```
+
+The link should:
+
+* Open in a new tab.
+* Use the URL returned by the backend.
+* Not construct or modify the URL.
+
+Use:
+
+```html
+target="_blank"
+rel="noopener noreferrer"
+```
+
+---
+
+# 15. Loading State
+
+File:
+
+```text
+src/components/LoadingState.tsx
+```
+
+When `/news/query` is being processed:
+
+```text
+Searching South African news...
+
+Retrieving relevant articles and generating your digest.
+```
+
+The Search button should change from:
+
+```text
+Search News
+```
+
+to:
+
+```text
+Searching...
+```
+
+The Search button must be disabled while the request is running.
+
+---
+
+# 16. Error State
+
+File:
+
+```text
+src/components/ErrorMessage.tsx
+```
+
+The frontend should display user-friendly errors.
+
+### Network Error
+
+```text
+Unable to connect to the News Digest backend.
+Please check that the backend is running.
+```
+
+### Query Error
+
+```text
+We couldn't generate the news digest.
+Please try again.
+```
+
+### Ingestion Error
+
+```text
+News ingestion failed.
+Please try again.
+```
+
+Do not display:
+
+* Stack traces
+* API keys
+* Database credentials
+* Internal server details
+
+---
+
+# 17. Empty Result State
+
+If the backend returns no relevant articles:
+
+```text
+No relevant news found.
+
+Try changing your question or location.
+```
+
+The frontend should not display an empty results section.
+
+---
+
+# 18. Ingestion Panel
+
+File:
+
+```text
+src/components/IngestionPanel.tsx
+```
+
+Responsibilities:
+
+* Allow the user to manually trigger ingestion.
+* Display ingestion progress.
+* Display ingestion results.
+* Display ingestion errors.
+
+UI:
+
+```text
+News Data
+
+Update the database with the latest articles
+from the configured South African news sources.
+
+[ Run Ingestion ]
+```
+
+---
+
+# 19. Ingestion Request
+
+When the user clicks **Run Ingestion**:
+
+```http
+POST /ingest/run
+```
+
+The backend supports:
+
+```json
+{
+  "sourceIds": [
+    "news24-south-africa"
+  ]
+}
+```
+
+For the initial frontend implementation, use the basic ingestion action without requiring the user to manually select source IDs.
+
+The frontend should call the endpoint according to the backend's actual API contract.
+
+---
+
+# 20. Ingestion Flow
+
+```text
+User
+  │
+  ▼
+Run Ingestion
+  │
+  ▼
+IngestionPanel
+  │
+  ▼
+newsApi.runIngestion()
+  │
+  ▼
+POST /ingest/run
+  │
+  ▼
+Backend
+  │
+  ▼
+Configured News Sources
+  │
+  ▼
+Article Processing
+  │
+  ▼
+MongoDB Atlas
+  │
+  ▼
+Ingestion Response
+  │
+  ▼
+IngestionPanel
+  │
+  ▼
+User
+```
+
+---
+
+# 21. Ingestion Loading State
+
+While ingestion is running:
+
+```text
+Ingesting news...
+```
+
+The button should be disabled.
+
+Example:
+
+```text
+[ Ingesting... ]
+```
+
+After completion:
+
+```text
+[ Run Ingestion ]
+```
+
+---
+
+# 22. Ingestion Result
+
+Display the actual information returned by the backend.
+
+If the backend returns statistics, display them in a simple status panel.
+
+Example:
+
+```text
+Ingestion Complete
+
+Sources processed: 10
+Articles fetched: 120
+New articles: 95
+Updated articles: 20
+Errors: 5
+```
+
+Do not hard-code these values.
+
+Use the values returned by the API.
+
+---
+
+# 23. API Service Layer
+
+File:
+
+```text
+src/services/newsApi.ts
+```
+
+This is the only layer responsible for making API requests.
+
+Implement:
+
+```typescript
+checkHealth()
+queryNews()
+runIngestion()
+```
+
+Conceptually:
+
+```typescript
+checkHealth()
+    ↓
+GET /health
+```
+
+```typescript
+queryNews(request)
+    ↓
+POST /news/query
+```
+
+```typescript
+runIngestion()
+    ↓
+POST /ingest/run
+```
+
+Components should not directly call `fetch()`.
+
+---
+
+# 24. API Base URL
+
+Read the backend URL from:
+
+```env
+VITE_API_BASE_URL=http://localhost:3000
+```
+
+The service layer should construct requests using:
+
+```typescript
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+```
+
+Example:
+
+```text
+${API_BASE_URL}/health
+${API_BASE_URL}/news/query
+${API_BASE_URL}/ingest/run
+```
+
+---
+
+# 25. Type Definitions
+
+File:
+
+```text
+src/types/news.ts
+```
+
+Create TypeScript interfaces matching the actual backend API responses.
+
+Query request:
+
+```typescript
+export interface NewsQueryRequest {
+  query: string;
+  location?: string;
+  maxItems?: number;
+}
+```
+
+The response types must be based on the actual backend implementation.
+
+Do not guess or create frontend-only response fields.
+
+---
+
+# 26. State Management
+
+Use React state for the initial implementation.
+
+The main page should manage:
+
+```text
+query
+location
+maxItems
+
+loading
+error
+
+digest
+newsItems
+
+backendStatus
+
+ingestionLoading
+ingestionResult
+ingestionError
+```
+
+No external state-management library is required.
+
+---
+
+# 27. Main Page
+
+File:
+
+```text
+src/pages/NewsDigestPage.tsx
+```
+
+This page coordinates the main application.
+
+Responsibilities:
+
+* Store query state.
+* Call API service functions.
+* Handle loading.
+* Handle errors.
+* Store API responses.
+* Pass data to child components.
+
+Conceptual structure:
+
+```text
+NewsDigestPage
+│
+├── Header
+│     └── HealthStatus
+│
+├── QueryForm
+│
+├── LoadingState
+│
+├── ErrorMessage
+│
+├── NewsDigest
+│     └── NewsCard
+│
+└── IngestionPanel
+```
+
+---
+
+# 28. Application Flow
+
+## Initial Load
+
+```text
+Application starts
+       ↓
+NewsDigestPage loads
+       ↓
+HealthStatus calls GET /health
+       ↓
+Backend status displayed
+       ↓
+User sees query interface
+```
+
+---
+
+## Query
+
+```text
+User enters query
+       ↓
+User enters optional location
+       ↓
+User chooses maxItems
+       ↓
+User clicks Search News
+       ↓
+Frontend validates query
+       ↓
+Loading state
+       ↓
+POST /news/query
+       ↓
+Backend processes RAG
+       ↓
+Response received
+       ↓
+Digest displayed
+       ↓
+News articles displayed
+```
+
+---
+
+## Ingestion
+
+```text
+User clicks Run Ingestion
+       ↓
+Loading state
+       ↓
+POST /ingest/run
+       ↓
+Backend ingests configured sources
+       ↓
+Response received
+       ↓
+Ingestion result displayed
+```
+
+---
+
+# 29. Data Flow
+
+```text
+                       FRONTEND
+
+User Input
+    │
+    ▼
+React Components
+    │
+    ▼
+Page State
+    │
+    ▼
+API Service
+    │
+    ▼
+HTTP Request
+    │
+    ▼
+──────────────────────────────────
+             BACKEND
+──────────────────────────────────
+    │
+    ▼
+RAG / Ingestion
+    │
+    ▼
+MongoDB / LLM / News Sources
+    │
+    ▼
+HTTP Response
+──────────────────────────────────
+    │
+    ▼
+API Service
+    │
+    ▼
+Page State
+    │
+    ▼
+React Components
+    │
+    ▼
+User
+```
+
+---
+
+# 30. Security Architecture
+
+The browser must only know the backend API URL.
+
+```text
+Frontend
+   │
+   │ VITE_API_BASE_URL
+   ▼
+Backend
+   │
+   ├── LLM API keys
+   ├── Embedding API keys
+   ├── MongoDB credentials
+   └── News source configuration
+```
+
+Never place the following in frontend code:
+
+```text
+MISTRAL_API_KEY
+OPENAI_API_KEY
+MONGODB_URI
+MongoDB username
+MongoDB password
+```
+
+The frontend must never connect directly to MongoDB Atlas.
+
+---
+
+# 31. Responsive UI Architecture
+
+The UI must support:
+
+```text
+Desktop
+Tablet
+Mobile
+```
+
+Desktop:
+
+```text
+┌────────────────────────────────────────────┐
+│ Header                                     │
+├────────────────────────────────────────────┤
+│ Query                                      │
+│ Filters                                    │
+├────────────────────────────────────────────┤
+│ Digest                                     │
+├────────────────────────────────────────────┤
+│ News Cards                                 │
+└────────────────────────────────────────────┘
+```
+
+Mobile:
+
+```text
+┌───────────────────────┐
+│ Header                │
+├───────────────────────┤
+│ Query                 │
+│                       │
+│ Location              │
+│                       │
+│ Max Articles          │
+│                       │
+│ Search                │
+├───────────────────────┤
+│ Digest                │
+├───────────────────────┤
+│ News Card             │
+├───────────────────────┤
+│ News Card             │
+└───────────────────────┘
+```
+
+Avoid horizontal scrolling.
+
+---
+
+# 32. UI Design Requirements
+
+The interface should have:
+
+* Clean modern appearance
+* Clear typography
+* Good spacing
+* Readable digest content
+* Clearly separated sections
+* Consistent buttons
+* Responsive cards
+* Visible loading states
+* Clear error messages
+* Accessible form controls
+
+The application should feel like a **professional AI news assistant**.
+
+Avoid unnecessary animations or complex visual effects.
+
+---
+
+# 33. Accessibility
+
+Use semantic HTML.
+
+Use:
+
+```html
+<header>
+<main>
+<section>
+<form>
+<label>
+<input>
+<textarea>
+<button>
+<article>
+```
+
+All form fields must have labels.
+
+Buttons must clearly describe their action.
+
+Links to original articles must clearly indicate that they open the source article.
+
+---
+
+# 34. Backend Contract
+
+The frontend must integrate with the existing backend contract:
+
+```text
+GET /health
+
+POST /news/query
+
+POST /ingest/run
+```
+
+The frontend should not assume additional endpoints exist.
+
+The frontend should not implement functionality that belongs to undocumented backend endpoints.
+
+If the backend response structure changes, update the frontend TypeScript types and rendering logic accordingly.
+
+---
+
+# 35. Responsibility Separation
+
+| Responsibility         | Frontend |    Backend |
+| ---------------------- | -------: | ---------: |
+| User interface         |        ✓ |            |
+| Query input            |        ✓ |            |
+| Location input         |        ✓ |            |
+| Max article input      |        ✓ |            |
+| API communication      |        ✓ |            |
+| Health display         |        ✓ |          ✓ |
+| News ingestion trigger |        ✓ |          ✓ |
+| News scraping          |          |          ✓ |
+| Cheerio                |          |          ✓ |
+| Playwright             |          |          ✓ |
+| Article extraction     |          |          ✓ |
+| Article cleaning       |          |          ✓ |
+| Chunking               |          |          ✓ |
+| Embeddings             |          |          ✓ |
+| MongoDB Atlas          |          |          ✓ |
+| Atlas Search           |          |          ✓ |
+| Vector Search          |          |          ✓ |
+| Hybrid retrieval       |          |          ✓ |
+| LangChain              |          |          ✓ |
+| RAG                    |          |          ✓ |
+| LLM generation         |          |          ✓ |
+| Digest display         |        ✓ |            |
+| Article display        |        ✓ |            |
+| Source links           |        ✓ | ✓ provides |
+| Secrets                |          |          ✓ |
+
+---
+
+# 36. Implementation Requirements
+
+Implement the frontend in the following order:
+
+### Phase 1 – Project Setup
+
+Create the React + TypeScript + Vite application.
+
+### Phase 2 – Environment
+
+Create:
+
+```text
+.env
+.env.example
+```
+
+Configure:
+
+```env
+VITE_API_BASE_URL=http://localhost:3000
+```
+
+### Phase 3 – Types
+
+Create:
+
+```text
+src/types/news.ts
+```
+
+Define types matching the backend.
+
+### Phase 4 – API Service
+
+Create:
+
+```text
+src/services/newsApi.ts
+```
+
+Implement:
+
+```text
+checkHealth()
+queryNews()
+runIngestion()
+```
+
+### Phase 5 – Main Page
+
+Create:
+
+```text
+src/pages/NewsDigestPage.tsx
+```
+
+### Phase 6 – Query UI
+
+Implement:
+
+```text
+Query
+Location
+Maximum Articles
+Search button
+```
+
+### Phase 7 – Digest
+
+Implement:
+
+```text
+NewsDigest
+NewsCard
+Source links
+```
+
+### Phase 8 – Health
+
+Implement:
+
+```text
+HealthStatus
+```
+
+### Phase 9 – Ingestion
+
+Implement:
+
+```text
+IngestionPanel
+```
+
+### Phase 10 – Error and Loading States
+
+Implement:
+
+```text
+LoadingState
+ErrorMessage
+Empty results
+```
+
+### Phase 11 – Styling
+
+Implement responsive desktop, tablet, and mobile layouts.
+
+### Phase 12 – Integration Testing
+
+Verify:
+
+```text
+Frontend
+   ↓
+GET /health
+```
+
+```text
+Frontend
+   ↓
+POST /news/query
+   ↓
+Backend RAG
+   ↓
+Response
+   ↓
+Frontend
+```
+
+```text
+Frontend
+   ↓
+POST /ingest/run
+   ↓
+Backend ingestion
+   ↓
+Response
+   ↓
+Frontend
+```
+
+---
+
+# 37. Acceptance Criteria
+
+The frontend is complete when:
+
+* [ ] React + TypeScript + Vite application runs.
+* [ ] Backend URL is configurable through `.env`.
+* [ ] `/health` is successfully integrated.
+* [ ] Backend status is visible.
+* [ ] User can enter a natural-language query.
+* [ ] User can enter an optional location.
+* [ ] User can specify maximum articles.
+* [ ] `/news/query` is called correctly.
+* [ ] Query loading state works.
+* [ ] Query errors are handled.
+* [ ] News digest is displayed.
+* [ ] News articles are displayed.
+* [ ] Article sources are displayed.
+* [ ] Publication dates are displayed when returned.
+* [ ] Original article links work.
+* [ ] Empty results are handled.
+* [ ] `/ingest/run` is integrated.
+* [ ] Ingestion loading state works.
+* [ ] Ingestion results are displayed.
+* [ ] Ingestion errors are handled.
+* [ ] Backend secrets are not exposed.
+* [ ] Frontend does not access MongoDB directly.
+* [ ] Frontend does not implement RAG.
+* [ ] Frontend does not implement embeddings.
+* [ ] Frontend does not scrape news websites.
+* [ ] Application works on desktop and mobile.
+
+---
+
+# 38. Final Architecture
+
+```text
+                         ┌──────────────┐
+                         │     USER     │
+                         └──────┬───────┘
+                                │
+                                ▼
+                  ┌────────────────────────┐
+                  │    REACT FRONTEND      │
+                  │                        │
+                  │  Query Form            │
+                  │  Health Status         │
+                  │  News Digest           │
+                  │  News Cards            │
+                  │  Ingestion Panel       │
+                  └───────────┬────────────┘
+                              │
+                              ▼
+                  ┌────────────────────────┐
+                  │     API SERVICE        │
+                  │     newsApi.ts         │
+                  └───────────┬────────────┘
+                              │
+                     HTTP REST API
+                              │
+                              ▼
+                  ┌────────────────────────┐
+                  │        BACKEND         │
+                  │   Node.js + TypeScript │
+                  └───────────┬────────────┘
+                              │
+              ┌───────────────┼────────────────┐
+              │               │                │
+              ▼               ▼                ▼
+          Ingestion       Hybrid RAG        Health
+              │               │
+              ▼               ▼
+       News Sources      BM25 + Vector
+                              │
+                              ▼
+                             LLM
+                              │
+                              ▼
+                        News Digest
+                              │
+                              ▼
+                         API Response
+                              │
+                              ▼
+                       REACT FRONTEND
+                              │
+                              ▼
+                            USER
+```
+
+## Core Principle
+
+The frontend is a **thin client**.
+
+It is responsible for:
+
+```text
+User interaction
+       +
+API communication
+       +
+Presentation
+```
+
+The existing backend is responsible for:
+
+```text
+News ingestion
+       +
+Article processing
+       +
+Embeddings
+       +
+MongoDB Atlas
+       +
+Hybrid retrieval
+       +
+RAG
+       +
+LLM generation
+```
+
+The frontend must integrate with the backend through its existing REST API rather than reimplementing any backend functionality.
